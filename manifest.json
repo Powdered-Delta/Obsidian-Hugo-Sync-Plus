@@ -1,0 +1,12 @@
+{
+  "id": "obsidian-hugo-sync",
+  "name": "Obsidian Hugo Sync",
+  "version": "0.0.1",
+  "minAppVersion": "0.12.0",
+  "description": "Sync Obsidian notes to Hugo blog",
+  "author": "Cray",
+  "authorUrl": "https://blog.crayh.com",
+  "isDesktopOnly": false,
+  "main": "main.js",
+  "repo": "https://github.com/crayhuang/Obsidian-Hugo-Sync"
+}
