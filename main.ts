@@ -144,25 +144,22 @@ export default class HugoSyncPlugin extends Plugin {
     console.log('Converting to Hugo format:', fileName);
     const title = fileName.replace('.md', '');
     const date = new Date().toISOString();
-  
-    // 提取标签
+
     const tags: string[] = [];
-  
-    // 处理 Obsidian 的标签格式
+
     const lines = content.split('\n');
     let tagSection = false;
     let processedContent = [];
     let currentHeaderLevel = 0;
     let skipContent = false;
-  
-    // 用于检查标签是否为纯符号的正则表达式
+
     const symbolOnlyRegex = /^[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]+$/;
-  
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
-    
-      if (trimmedLine.startsWith('#')) {
+
+      if (trimmedLine.startsWith('##')) {
         const headerMatch = trimmedLine.match(/^(#+)\s*(.*)/);
         if (headerMatch) {
           const headerLevel = headerMatch[1].length;
@@ -198,7 +195,23 @@ export default class HugoSyncPlugin extends Plugin {
           tagSection = false;
         }
       } else if (!skipContent) {
-        processedContent.push(line); // 保留原始的缩进
+        // New logic to handle standalone tags
+        const standaloneTagsMatch = trimmedLine.match(/#[^\s#]+/g);
+        if (standaloneTagsMatch) {
+          standaloneTagsMatch.forEach(tag => {
+            const cleanTag = tag.slice(1); // Remove the '#'
+            if (!symbolOnlyRegex.test(cleanTag) && !tags.includes(cleanTag)) {
+              tags.push(cleanTag);
+            }
+          });
+          // Remove the standalone tags from the line
+          const cleanedLine = line.replace(/#[^\s#]+/g, '').trim();
+          if (cleanedLine) {
+            processedContent.push(cleanedLine);
+          }
+        } else {
+          processedContent.push(line); // Keep original indentation
+        }
       }
     }
 

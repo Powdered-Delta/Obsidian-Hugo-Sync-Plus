@@ -184,7 +184,7 @@ var HugoSyncPlugin = class extends import_obsidian.Plugin {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
-      if (trimmedLine.startsWith("#")) {
+      if (trimmedLine.startsWith("##")) {
         const headerMatch = trimmedLine.match(/^(#+)\s*(.*)/);
         if (headerMatch) {
           const headerLevel = headerMatch[1].length;
@@ -215,7 +215,21 @@ var HugoSyncPlugin = class extends import_obsidian.Plugin {
           tagSection = false;
         }
       } else if (!skipContent) {
-        processedContent.push(line);
+        const standaloneTagsMatch = trimmedLine.match(/#[^\s#]+/g);
+        if (standaloneTagsMatch) {
+          standaloneTagsMatch.forEach((tag) => {
+            const cleanTag = tag.slice(1);
+            if (!symbolOnlyRegex.test(cleanTag) && !tags.includes(cleanTag)) {
+              tags.push(cleanTag);
+            }
+          });
+          const cleanedLine = line.replace(/#[^\s#]+/g, "").trim();
+          if (cleanedLine) {
+            processedContent.push(cleanedLine);
+          }
+        } else {
+          processedContent.push(line);
+        }
       }
     }
     console.log("Extracted tags:", tags);
