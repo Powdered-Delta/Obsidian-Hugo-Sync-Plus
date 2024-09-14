@@ -1,6 +1,6 @@
 {
   "name": "obsidian-hugo-sync",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "Sync Obsidian notes to Hugo blog",
   "main": "main.js",
   "scripts": {

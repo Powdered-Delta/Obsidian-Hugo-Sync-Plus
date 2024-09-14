@@ -1,0 +1,6 @@
+# Existing entries
+node_modules
+.DS_Store
+
+# Add this new line to ignore main.js
+main.js
