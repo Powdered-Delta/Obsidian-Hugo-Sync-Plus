@@ -22,7 +22,6 @@ export default class HugoSyncPlugin extends Plugin {
   lang: LanguageStrings;
 
   async onload() {
-    console.log('Loading HugoSyncPlugin');
     await this.loadSettings();
     this.lang = languages[this.settings.language] || languages.en;
 
@@ -128,12 +127,8 @@ export default class HugoSyncPlugin extends Plugin {
   async syncFileToHugo(file: TFile) {
     console.log('Starting to sync file:', file.name);
     const content = await this.app.vault.read(file);
-    console.log('Original content:', content);
-    console.log('Content type:', typeof content);
-    console.log('Content length:', content.length);
     
     const hugoContent = this.convertToHugoFormat(content, file.name);
-    console.log('Converted content:', hugoContent);
     
     const hugoFilePath = path.join(this.settings.hugoPath, this.settings.contentPath, file.name);
     fs.writeFileSync(hugoFilePath, hugoContent);
@@ -141,7 +136,6 @@ export default class HugoSyncPlugin extends Plugin {
   }
 
   convertToHugoFormat(content: string, fileName: string): string {
-    console.log('Converting to Hugo format:', fileName);
     const title = fileName.replace('.md', '');
     const date = new Date().toISOString();
 
@@ -172,7 +166,6 @@ export default class HugoSyncPlugin extends Plugin {
           if (this.settings.filteredHeaders.includes(headerContent)) {
             skipContent = true;
             currentHeaderLevel = headerLevel;
-            console.log(`Filtering header: ${headerContent}`);
             continue;
           }
           
@@ -214,9 +207,6 @@ export default class HugoSyncPlugin extends Plugin {
         }
       }
     }
-
-    console.log('Extracted tags:', tags);
-
     // 创建 Hugo 格式的前置元数据
     const hugoFrontMatter = `---
 title: "${title}"
@@ -229,9 +219,6 @@ tags: [${tags.map(tag => `"${tag}"`).join(', ')}]
 
     // 组合处理后的内容
     let cleanContent = processedContent.join('\n').trim();
-
-    console.log('Hugo front matter:', hugoFrontMatter);
-    console.log('Clean content:', cleanContent);
 
     return hugoFrontMatter + cleanContent;
   }
