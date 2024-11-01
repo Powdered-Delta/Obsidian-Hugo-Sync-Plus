@@ -60,7 +60,6 @@ export default class HugoSyncPlugin extends Plugin {
       return;
     }
 
-    console.log('Syncing selected files to Hugo...');
     let successCount = 0;
     let failCount = 0;
     let errorMessages = [];
@@ -125,14 +124,12 @@ export default class HugoSyncPlugin extends Plugin {
   }
 
   async syncFileToHugo(file: TFile) {
-    console.log('Starting to sync file:', file.name);
     const content = await this.app.vault.read(file);
     
     const hugoContent = this.convertToHugoFormat(content, file.name);
     
     const hugoFilePath = path.join(this.settings.hugoPath, this.settings.contentPath, file.name);
     fs.writeFileSync(hugoFilePath, hugoContent);
-    console.log(`Synced file: ${file.name}`);
   }
 
   convertToHugoFormat(content: string, fileName: string): string {
