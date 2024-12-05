@@ -6,6 +6,5 @@
   "description": "Sync the selected notes to Hugo blog",
   "author": "Cray Huang",
   "authorUrl": "https://blog.crayh.com",
-  "isDesktopOnly": true,
-  "repo": "https://github.com/crayhuang/Obsidian-Hugo-Sync"
+  "isDesktopOnly": true
 }
