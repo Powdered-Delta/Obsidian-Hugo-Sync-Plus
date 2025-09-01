@@ -9,6 +9,8 @@ export interface LanguageStrings {
     filteredHeadersDesc: string;
   };
   notices: {
+    iconNotice: string;
+    commandName: string;
     syncSuccess: string;
     syncError: string;
     noFilesSelected: string;
@@ -25,9 +27,12 @@ const en: LanguageStrings = {
     contentPath: "Content Path",
     contentPathDesc: "Path to Hugo content directory (relative to Hugo Path)",
     filteredHeaders: "Filtered Headers",
-    filteredHeadersDesc: "Enter headers to be filtered from Hugo content (one per line)",
+    filteredHeadersDesc:
+      "Enter headers to be filtered from Hugo content (one per line)",
   },
   notices: {
+    iconNotice: "Sync to Hugo",
+    commandName: "Sync selected file(s) to Hugo ",
     syncSuccess: "Synced {0} file(s) to Hugo",
     syncError: "Error syncing to Hugo: {0}",
     noFilesSelected: "No files selected for syncing",
@@ -47,6 +52,8 @@ const zh: LanguageStrings = {
     filteredHeadersDesc: "输入要从 Hugo 内容中过滤的标题（每行一个）",
   },
   notices: {
+    iconNotice: "同步到 Hugo",
+    commandName: "将选中的文件同步到 Hugo",
     syncSuccess: "已同步 {0} 个文件到 Hugo",
     syncError: "同步到 Hugo 时出错：{0}",
     noFilesSelected: "没有选择要同步的文件",
