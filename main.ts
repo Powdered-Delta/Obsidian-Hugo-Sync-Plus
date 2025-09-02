@@ -36,11 +36,11 @@ interface CopyImageItem {
 const DEFAULT_SETTINGS: HugoSyncSettings = {
   hugoPath: "",
   contentPath: "content/posts",
-  imageToStatic: true,
+  imageToStatic: false,
   staticPath: "static",
   filteredHeaders: [],
   language: "en",
-  descriptionLines: 5,
+  descriptionLines: 0,
   descriptionMaxLength: 120,
   useFirstImageAsCover: false,
   authorName: "",
@@ -168,10 +168,10 @@ export default class HugoSyncPlugin extends Plugin {
 
   async syncFileToHugo(file: TFile) {
     const content = await this.app.vault.read(file);
-
     const { hugoContent, imageList } = this.convertToHugoFormat(
       content,
-      file.name
+      file.name,
+      file.path
     );
 
     const hugoFilePath = (() => {
@@ -179,15 +179,18 @@ export default class HugoSyncPlugin extends Plugin {
         return path.join(
           this.settings.hugoPath,
           this.settings.contentPath,
-          file.name.replace(".md", ""),
-          "index.md"
-        );
-      } else {
-        return path.join(
-          this.settings.hugoPath,
-          this.settings.contentPath,
           file.name
         );
+      } else {
+        // 为否的情况下还需要额外创建目录
+        const dir = path.join(
+          this.settings.hugoPath,
+          this.settings.contentPath,
+          file.name.replace(".md", "")
+        );
+        fs.mkdirSync(dir, { recursive: true });
+
+        return path.join(dir, "index.md");
       }
     })();
 
@@ -200,13 +203,25 @@ export default class HugoSyncPlugin extends Plugin {
     // path 的差距已经在 convertToHugoFormat 中处理过了
     // 此处只需要按顺序拷贝图片到对应的位置
     for (const image of imageList) {
-      fs.writeFileSync(image.originalPath, image.newPath);
+      // 检查目标文件是否已存在，如果存在则跳过
+      if (fs.existsSync(image.newPath)) {
+        console.log(`File ${image.newPath} already exists, skipping...`);
+        continue;
+      }
+      // 确保目标目录存在
+      const targetDir = path.dirname(image.newPath);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      // 复制文件
+      fs.copyFileSync(image.originalPath, image.newPath);
     }
   }
 
   convertToHugoFormat(
     content: string,
-    fileName: string
+    fileName: string,
+    filePath: string
   ): { hugoContent: string; imageList: CopyImageItem[] } {
     const title = fileName.replace(".md", "");
     const date = new Date().toISOString();
@@ -251,71 +266,149 @@ export default class HugoSyncPlugin extends Plugin {
       }
 
       // 检查是否为图片引用
-      if (!skipContent) {
-        const imageRegex =
-          /!\[.*?\]\((.*?\.(?:png|jpg|jpeg|gif|webp|svg))(?:\s+["'].*?["'])?\)/gi;
-        let match;
-        while ((match = imageRegex.exec(line)) !== null) {
-          const imagePath = match[1];
-          // 检查图片是否为本地文件（不处理网络图片）
-          if (!imagePath.startsWith("http")) {
-            // 构建完整的原始图片路径
-            const originalImagePath = path.join(
-              path.dirname(this.app.workspace.getActiveFile()?.path || ""),
-              imagePath
-            );
+      const processImageLink = (
+        imagePath: string,
+        line: string,
+        matchText: string,
+        isObsidianImage: boolean
+      ) => {
+        // 检查图片是否为本地文件（不处理网络图片）
+        // https://docs.obsidian.md/Reference/TypeScript+API/Vault
 
-            // 检查图片文件是否存在
-            if (fs.existsSync(originalImagePath)) {
-              // 生成新的图片文件名（使用原文件名+时间戳避免冲突）
-              const ext = path.extname(imagePath);
-              const basename = path.basename(imagePath, ext);
-              const newName = `${basename}_${Date.now()}${ext}`;
-
-              // 构建目标路径
-              // 增加选项：
-              //     和源文件在同一目录下，新建文件夹
-              //     或者统一放到 static 下
-
-              if (this.settings.imageToStatic) {
-                var newImagePath = path.join(
-                  this.settings.hugoPath,
-                  this.settings.staticPath,
-                  "images",
-                  newName
-                );
-              } else {
-                // 和md源文件放到同一目录下(markdown
-                //  原名作为文件夹名字，图片放到同目录 images 目录下
-                //  原 markdown 重命名为 index.md
-                var newImagePath = path.join(
-                  this.settings.hugoPath,
-                  this.settings.contentPath,
-                  title,
-                  "images"
-                );
-              }
-
-              // 添加到待拷贝列表
-              imagesToCopy.push({
-                originalPath: originalImagePath,
-                newPath: newImagePath,
-                newName: newName,
-              });
-
-              // 更新行内容，替换为Hugo中的路径
-              const relativeNewPath = path
-                .join(
-                  this.settings.imageToStatic ? "/images" : "./images",
-                  newName
-                )
-                .replace(/\\/g, "/");
-              line.replace(
-                match[0],
-                match[0].replace(imagePath, relativeNewPath)
+        // 当链接类型为 obsidian 图片时，特殊处理：
+        // 参考 https://forum.obsidian.md/t/how-to-get-full-paths-from-link-text/75146/4
+        //  getFirstLinkpathDest: this.app.metadataCache.getFirstLinkpathDest(
+        //     imagePath,
+        //     filePath
+        //   )?.path,
+        //
+        // 可以正确获取到 图片的相对路径 Programming/attachments/test.png
+        let originalImagePath: string;
+        if (!imagePath.startsWith("http")) {
+          // 构建完整的原始图片路径
+          const activeFilePath = this.app.workspace.getActiveFile()?.path || "";
+          // 处理不同类型的路径, 会有三种情况
+          if (isObsidianImage) {
+            // 是 Obsidian 图片链接格式，通过 getFirstLinkpathDest 获取目标路径
+            // 获取图片的相对路径
+            const imageRelativePath =
+              this.app.metadataCache.getFirstLinkpathDest(
+                imagePath,
+                activeFilePath
+              )?.path;
+            if (imageRelativePath) {
+              originalImagePath = path.join(
+                this.app.vault.adapter.getBasePath(),
+                imageRelativePath
               );
             }
+          } else if (path.isAbsolute(imagePath)) {
+            // 绝对路径（从 vault 根目录开始）
+            originalImagePath = path.join(
+              this.app.vault.adapter.getBasePath(),
+              imagePath
+            );
+          } else {
+            // 相对路径（相对于当前文件）
+            const currentDir = path.dirname(activeFilePath);
+            originalImagePath = path.join(
+              this.app.vault.adapter.getBasePath(),
+              currentDir,
+              imagePath
+            );
           }
+          // 检查图片文件是否存在
+          if (fs.existsSync(originalImagePath)) {
+            // 生成新的图片文件名（使用原文件名+时间戳避免冲突）
+            const ext = path.extname(imagePath);
+            const basename = path.basename(imagePath, ext);
+            // const newName = `${basename}_${Date.now()}${ext}`;
+            const newName = `${basename}${ext}`;
+
+            // 构建目标路径
+            let newImagePath: string;
+            if (this.settings.imageToStatic) {
+              newImagePath = path.join(
+                this.settings.hugoPath,
+                this.settings.staticPath,
+                "images",
+                newName
+              );
+            } else {
+              // 和md源文件放到同一目录下(markdown
+              //  原名作为文件夹名字，图片放到同目录 images 目录下
+              //  原 markdown 重命名为 index.md
+              newImagePath = path.join(
+                this.settings.hugoPath,
+                this.settings.contentPath,
+                title,
+                "images",
+                newName
+              );
+            }
+
+            // 添加到待拷贝列表
+            imagesToCopy.push({
+              originalPath: originalImagePath,
+              newPath: newImagePath,
+              newName: newName,
+            });
+
+            // 更新行内容，替换为Hugo中的路径
+            const relativeNewPath = path
+              .join(
+                this.settings.imageToStatic ? "/images" : "./images",
+                newName
+              )
+              .replace(/\\/g, "/")
+              .split("/")
+              .map((part) => encodeURIComponent(part))
+              .join("/");
+
+            // 判断原始语法类型并转换为标准Markdown语法
+            let newImageSyntax: string;
+            if (matchText.includes("![[")) {
+              // Obsidian语法 ![[image.png]] 转换为标准Markdown语法 ![image.png](/images/new_name.png)
+              const imageName = path.basename(imagePath);
+              newImageSyntax = `![${imageName}](${relativeNewPath})`;
+            } else {
+              // 原本就是标准Markdown语法，只需替换路径
+              newImageSyntax = matchText.replace(imagePath, relativeNewPath);
+            }
+            // 实际替换行中的图片语法
+            var newLine = line.replace(matchText, newImageSyntax);
+
+            // 更新处理后的内容数组
+            processedContent.push(newLine);
+          }
+        }
+      };
+
+      if (!skipContent) {
+        let lineProcessed = false;
+
+        // 处理标准 Markdown 语法: ![alt](path)
+        const markdownImageRegex =
+          /!\[.*?\]\((.*?\.(?:png|jpg|jpeg|gif|webp|svg))(?:\s+["'].*?["'])?\)/gi;
+        let match;
+        while ((match = markdownImageRegex.exec(line)) !== null) {
+          const imagePath = match[1];
+          processImageLink(imagePath, line, match[0]);
+          lineProcessed = true;
+        }
+
+        // 处理 Obsidian 语法: ![[path]]
+        const obsidianImageRegex =
+          /!\[\[(.*?\.(?:png|jpg|jpeg|gif|webp|svg))\]\]/gi;
+        while ((match = obsidianImageRegex.exec(line)) !== null) {
+          const imagePath = match[1];
+          processImageLink(imagePath, line, match[0], true);
+          lineProcessed = true;
+        }
+
+        // 如果当前行已经处理过图片链接，则跳过其他处理
+        if (lineProcessed) {
+          continue;
         }
       }
 
@@ -375,10 +468,14 @@ ${
     ? "\ncover: " + imagesToCopy[0].newPath
     : ""
 }
----`;
+---
+
+`;
 
     // 组合处理后的内容
-    let cleanContent = processedContent.join("\n").trim();
+    let cleanContent = processedContent.join("\n");
+    // 只移除最开始和最后的空白行，保留段落间的空行
+    cleanContent = cleanContent.replace(/^\n+|\n+$/g, "");
 
     return {
       hugoContent: hugoFrontMatter + cleanContent,
@@ -426,6 +523,21 @@ class HugoSyncSettingTab extends PluginSettingTab {
           })
       );
 
+    // 添加 imageToStatic 配置项
+    new Setting(containerEl)
+      .setName("Image Handling Mode")
+      .setDesc(
+        "Enable to store images in static folder, disable to store with markdown file"
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.imageToStatic)
+          .onChange(async (value) => {
+            this.plugin.settings.imageToStatic = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
     new Setting(containerEl)
       .setName(this.plugin.lang.settings.filteredHeaders)
       .setDesc(this.plugin.lang.settings.filteredHeadersDesc)
@@ -438,6 +550,63 @@ class HugoSyncSettingTab extends PluginSettingTab {
               .split("\n")
               .map((s) => s.trim())
               .filter((s) => s);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // 添加 descriptionLines 配置项
+    new Setting(containerEl)
+      .setName("Description Lines")
+      .setDesc("Number of lines to use as description (0 to disable)")
+      .addSlider((slider) =>
+        slider
+          .setLimits(0, 20, 1)
+          .setValue(this.plugin.settings.descriptionLines)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.descriptionLines = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // 添加 descriptionMaxLength 配置项
+    new Setting(containerEl)
+      .setName("Description Max Length")
+      .setDesc("Maximum length of description text")
+      .addSlider((slider) =>
+        slider
+          .setLimits(50, 500, 10)
+          .setValue(this.plugin.settings.descriptionMaxLength)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.descriptionMaxLength = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // 添加 useFirstImageAsCover 配置项
+    new Setting(containerEl)
+      .setName("Use First Image as Cover")
+      .setDesc("Use the first image in the post as the cover image")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.useFirstImageAsCover)
+          .onChange(async (value) => {
+            this.plugin.settings.useFirstImageAsCover = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // 添加 authorName 配置项
+    new Setting(containerEl)
+      .setName("Author Name")
+      .setDesc("Default author name for posts")
+      .addText((text) =>
+        text
+          .setPlaceholder("Author name")
+          .setValue(this.plugin.settings.authorName)
+          .onChange(async (value) => {
+            this.plugin.settings.authorName = value;
             await this.plugin.saveSettings();
           })
       );

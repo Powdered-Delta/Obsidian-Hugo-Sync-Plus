@@ -10,11 +10,18 @@ This plugin allows you to sync your Obsidian notes with Hugo, a popular static s
 - Customizable Hugo content path
 
 
-修改新增内容：
+## 修改新增内容：
 - 增加了指定 hugo static 目录的配置项
 - 可以自动将引用的图片移动到 hugo static 目录下，同时修改 markdown 中的图片路径
 - 增加了部分提示的 i18n 中文版
 - 增加了自动生成 hugo metadata 的 description 字段的功能
+- 增加了Obsidian 图片语法的识别
+- 暂时移除了新图片自动重命名加时间戳的功能
+- 目前能够正常使用 static 图片模式（推荐使用 同目录模式，即：Image handling mode: false ）
+
+## 已知bug:
+- 转换时疑似会丢失换行，不确定是否与 obsidian 和 hugo 的兼容性有关
+- description 字段目前存在问题，会自动取用 tags 而不是正文（懒得改了，后续修改到正文判断后生成即可）
 
 ## Installation
 
